@@ -1,79 +1,11 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Patinhas Prime | Loja Oficial</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
-
-<style>
-body{margin:0;font-family:Poppins;background:#fffaf5}
-header{background:#ff3c00;color:white;padding:20px;text-align:center;font-weight:800}
-.grid{display:flex;flex-wrap:wrap;gap:30px;justify-content:center;padding:40px}
-.card{background:white;width:260px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,.1);overflow:hidden}
-.card img{width:100%;height:180px;object-fit:cover}
-.card-content{padding:15px;text-align:center}
-.preco{color:#ff3c00;font-weight:800;font-size:20px}
-button{background:#ff3c00;color:white;border:none;padding:8px 15px;border-radius:20px;cursor:pointer;margin-top:8px}
-.remover{background:#999}
-.carrinho{position:fixed;right:0;top:0;width:320px;height:100%;background:white;box-shadow:-5px 0 20px rgba(0,0,0,.1);padding:20px;overflow:auto}
-.total{font-weight:800;margin-top:10px}
-input,textarea{width:100%;padding:8px;margin-bottom:10px}
-.whatsapp{position:fixed;bottom:20px;left:20px;background:#25D366;color:white;padding:15px;border-radius:50px;text-decoration:none;font-weight:bold}
-.adminBtn{position:fixed;bottom:20px;right:20px;background:black;color:white;padding:10px;border-radius:10px;cursor:pointer}
-.section{padding:40px}
-.comentario{background:#ffe8dc;padding:10px;margin-bottom:10px;border-radius:10px}
-</style>
-</head>
-<body>
-
-<header>🐾 Patinhas Prime - Área Exclusiva</header>
-
-<div id="cadastroSection" class="section">
-<h2>Cadastro</h2>
-<input id="nome" placeholder="Nome">
-<input id="telefone" placeholder="Telefone (DDD + número)">
-<button onclick="cadastrar()">Cadastrar</button>
-</div>
-
-<div id="loja" style="display:none">
-<div class="grid" id="produtos"></div>
-</div>
-
-<div class="carrinho">
-<h3>Seu Carrinho</h3>
-<ul id="lista"></ul>
-<div class="total">Total: R$ <span id="total">0.00</span></div>
-
-<input id="cupom" placeholder="Cupom PRIME15">
-<button onclick="aplicarCupom()">Aplicar Cupom</button>
-
-<button onclick="finalizar()">Finalizar no WhatsApp</button>
-<button onclick="mostrarPix()">Pagar no PIX</button>
-
-<div id="pixArea" style="display:none;text-align:center">
-<p>Chave PIX:</p>
-<strong>alphaolympus01@gmail.com</strong>
-<img id="qrcode">
-</div>
-</div>
-
-<div class="section">
-<h2>Área do Cliente</h2>
-<textarea id="duvida" placeholder="Envie sua dúvida ou sugestão"></textarea>
-<button onclick="enviarComentario()">Enviar</button>
-<div id="comentarios"></div>
-</div>
-
-<a href="https://wa.me/5511912552105" class="whatsapp">WhatsApp</a>
-<div class="adminBtn" onclick="abrirAdmin()">ADMIN</div>
-
 <script>
 
 let usuario = JSON.parse(localStorage.getItem("usuario"));
 let carrinho = JSON.parse(localStorage.getItem("carrinho")) || [];
 let comentarios = JSON.parse(localStorage.getItem("comentarios")) || [];
-let descontoAplicado = false;
+let historico = JSON.parse(localStorage.getItem("historico")) || [];
+let tentativas = JSON.parse(localStorage.getItem("tentativas")) || 0;
+let bloqueado = localStorage.getItem("bloqueado") || false;
 
 let produtos = [
 {nome:"Brinquedo Anti-Ansiedade",preco:39.90,img:"https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd"},
@@ -81,130 +13,132 @@ let produtos = [
 {nome:"Coleira Premium",preco:49.90,img:"https://images.unsplash.com/photo-1583511655826-05700442b31b"}
 ];
 
-function cadastrar(){
-let nome = document.getElementById("nome").value;
-let telefone = document.getElementById("telefone").value;
+if(bloqueado){
+alert("Conta temporariamente bloqueada por atividade suspeita.");
+}
 
-if(localStorage.getItem("telefone_"+telefone)){
-alert("Este número já possui cadastro.");
+// ===================
+// ANTIFRAUDE
+// ===================
+
+function verificarFraude(){
+tentativas++;
+localStorage.setItem("tentativas",tentativas);
+
+if(tentativas > 5){
+localStorage.setItem("bloqueado",true);
+alert("Muitas tentativas suspeitas. Conta bloqueada.");
+}
+}
+
+// ===================
+// FINALIZAR COMPRA
+// ===================
+
+function finalizar(){
+
+if(bloqueado){
+alert("Conta bloqueada.");
 return;
 }
 
-usuario = {nome,telefone,usouCupom:false};
-localStorage.setItem("usuario",JSON.stringify(usuario));
-localStorage.setItem("telefone_"+telefone,true);
-document.getElementById("cadastroSection").style.display="none";
-document.getElementById("loja").style.display="block";
-renderProdutos();
+if(carrinho.length == 0){
+alert("Carrinho vazio");
+verificarFraude();
+return;
 }
 
-if(usuario){
-document.getElementById("cadastroSection").style.display="none";
-document.getElementById("loja").style.display="block";
+let total = 0;
+let resumo = "";
+carrinho.forEach(i=>{
+total+=i.preco;
+resumo+=i.nome+" R$ "+i.preco.toFixed(2)+"\n";
+});
+
+// salvar no histórico
+let compra = {
+data: new Date().toLocaleString(),
+itens: carrinho,
+total: total.toFixed(2)
+};
+
+historico.push(compra);
+localStorage.setItem("historico",JSON.stringify(historico));
+
+// limpar carrinho
+carrinho = [];
+localStorage.setItem("carrinho",JSON.stringify(carrinho));
+atualizarCarrinho();
+
+// disparo automático pós-compra
+setTimeout(()=>{
+window.open("https://wa.me/5511912552105?text=Obrigado pela compra! Seu pedido está sendo preparado.");
+},2000);
+
+window.open("https://wa.me/5511912552105?text=Pedido confirmado:%0A"+resumo+"%0ATotal: R$ "+total.toFixed(2));
 }
 
-function renderProdutos(){
-let area=document.getElementById("produtos");
-area.innerHTML="";
-produtos.forEach((p,i)=>{
+// ===================
+// HISTÓRICO
+// ===================
+
+function mostrarHistorico(){
+let area = document.getElementById("historicoArea");
+area.innerHTML = "<h3>Histórico de Compras</h3>";
+
+historico.forEach(c=>{
 area.innerHTML+=`
-<div class="card">
-<img src="${p.img}">
-<div class="card-content">
-<h3>${p.nome}</h3>
-<div class="preco">R$ ${p.preco.toFixed(2)}</div>
-<button onclick="addCarrinho(${i})">Adicionar</button>
+<div style="background:#ffe8dc;padding:10px;margin-bottom:10px;border-radius:10px">
+<strong>${c.data}</strong><br>
+Total: R$ ${c.total}
 </div>
-</div>`;
+`;
 });
 }
 
-function addCarrinho(i){
-carrinho.push(produtos[i]);
-salvarCarrinho();
+// ===================
+// REMARKETING
+// ===================
+
+window.addEventListener("beforeunload", function (e) {
+if(carrinho.length > 0){
+localStorage.setItem("remarketing",true);
+}
+});
+
+if(localStorage.getItem("remarketing")){
+setTimeout(()=>{
+if(carrinho.length > 0){
+alert("🔥 ESPERE! Seu desconto ainda está ativo! Finalize agora antes que expire!");
+}
+},4000);
 }
 
-function removerItem(i){
-carrinho.splice(i,1);
-salvarCarrinho();
-}
-
-function salvarCarrinho(){
-localStorage.setItem("carrinho",JSON.stringify(carrinho));
-atualizarCarrinho();
-}
+// ===================
+// CARRINHO
+// ===================
 
 function atualizarCarrinho(){
 let lista=document.getElementById("lista");
 lista.innerHTML="";
 let total=0;
+
 carrinho.forEach((item,i)=>{
 total+=item.preco;
 lista.innerHTML+=`<li>${item.nome} R$ ${item.preco.toFixed(2)}
-<button class="remover" onclick="removerItem(${i})">X</button></li>`;
+<button onclick="removerItem(${i})">X</button></li>`;
 });
+
 document.getElementById("total").innerText=total.toFixed(2);
 }
 
-function aplicarCupom(){
-if(!usuario || usuario.usouCupom){
-alert("Cupom já utilizado.");
-return;
-}
-
-if(document.getElementById("cupom").value==="PRIME15"){
-usuario.usouCupom=true;
-localStorage.setItem("usuario",JSON.stringify(usuario));
-carrinho=carrinho.map(p=>({...p,preco:p.preco*0.85}));
-salvarCarrinho();
-alert("15% aplicado com sucesso!");
-}else{
-alert("Cupom inválido");
-}
-}
-
-function finalizar(){
-let total=document.getElementById("total").innerText;
-let msg="Pedido:%0A";
-carrinho.forEach(i=>msg+=i.nome+" R$ "+i.preco.toFixed(2)+"%0A");
-msg+="%0ATotal: R$ "+total;
-window.open("https://wa.me/5511912552105?text="+msg);
-}
-
-function mostrarPix(){
-document.getElementById("pixArea").style.display="block";
-let valor=document.getElementById("total").innerText;
-document.getElementById("qrcode").src=
-"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PIX%20alphaolympus01@gmail.com%20VALOR%20"+valor;
-}
-
-function enviarComentario(){
-let texto=document.getElementById("duvida").value;
-comentarios.push({nome:usuario.nome,texto});
-localStorage.setItem("comentarios",JSON.stringify(comentarios));
-mostrarComentarios();
-}
-
-function mostrarComentarios(){
-let area=document.getElementById("comentarios");
-area.innerHTML="";
-comentarios.forEach(c=>{
-area.innerHTML+=`<div class="comentario"><strong>${c.nome}:</strong> ${c.texto}</div>`;
-});
-}
-mostrarComentarios();
-
-function abrirAdmin(){
-let senha=prompt("Digite a senha:");
-if(senha==="Mateus2501@"){
-alert("Acesso liberado");
-}else{
-alert("Senha incorreta");
-}
+function removerItem(i){
+carrinho.splice(i,1);
+localStorage.setItem("carrinho",JSON.stringify(carrinho));
+atualizarCarrinho();
 }
 
 atualizarCarrinho();
+mostrarHistorico();
 
 </script>
-</body>
-</html>
